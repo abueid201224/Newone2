@@ -119,15 +119,6 @@ export const ReceivingScreen: React.FC<ReceivingScreenProps> = ({
     const clean = lastScannedCode.trim();
     if (!clean) return;
 
-    // Strict rule: Alert if barcode is greater than 10 digits (> 10 digits) and DO NOT complete scan!
-    // Scanning is performed for codes <= 10 digits.
-    if (clean.length > 10) {
-      if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
-      setImportNotice(`⚠️ تنبيه رقابي: كود الصنف [${clean}] أكبر من عشرة أرقام (${clean.length} خانة). تم إيقاف المسح لأن النظام يقبل فقط الأكواد حتى 10 أرقام!`);
-      setTimeout(() => setImportNotice(null), 5000);
-      return;
-    }
-
     setItems(prev => {
       const idx = prev.findIndex(i => i.itemCode.toLowerCase() === clean.toLowerCase());
       if (idx !== -1) {
@@ -310,13 +301,6 @@ export const ReceivingScreen: React.FC<ReceivingScreenProps> = ({
   const handleAddManual = () => {
     const clean = manualBarcode.trim();
     if (!clean) return;
-
-    if (clean.length > 10) {
-      if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
-      setImportNotice(`⚠️ تنبيه رقابي: كود الصنف [${clean}] أكبر من عشرة أرقام (${clean.length} خانة). تم إيقاف الإضافة لأن النظام يقبل فقط الأكواد حتى 10 أرقام!`);
-      setTimeout(() => setImportNotice(null), 5000);
-      return;
-    }
 
     const factors = resolveFactors(clean, packagingRules);
     let initCartons = 0;

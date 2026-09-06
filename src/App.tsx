@@ -6,7 +6,8 @@ import type {
   SyncMetadata, 
   AppSettings,
   MasterInvoiceItem,
-  ScannedAuditItem
+  ScannedAuditItem,
+  LongBarcodePolicy
 } from './types';
 import { 
   getActiveSession, 
@@ -244,12 +245,17 @@ export function App() {
     const cleanInvoice = invoiceNo.trim();
     if (!cleanInvoice) return;
 
-    // Strict rule: Invoice/Order numbers must start with 200 or 204 from the left
-    if (!isInvoiceOrOrderNumberPattern(cleanInvoice)) {
+    // Strict rule: Invoice/Order numbers must start with 200 or 204 from the left, or exist in master/incomplete data
+    const isPattern = isInvoiceOrOrderNumberPattern(cleanInvoice);
+    const existingMaster = await getInvoiceMasterItems(cleanInvoice);
+    const incomplete = await getIncompleteInvoice(cleanInvoice);
+    const isValidInvoice = isPattern || existingMaster.length > 0 || Boolean(incomplete);
+
+    if (!isValidInvoice) {
       if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
       if (settings.vibrationEnabled) SoundEffects.vibrate([200, 100, 200]);
       setScannerAlertNotice({
-        message: '⚠️ تنبيه رقابي: نمط رقم الفاتورة أو الطلب يجب أن يبدأ بـ 200 أو 204 من اليسار. لا يتم تفعيل مسح الأصناف إلا بعد فتح الفاتورة للمراجعة!',
+        message: '⚠️ تنبيه رقابي: نمط رقم الفاتورة أو الطلب يجب أن يبدأ بـ 200 أو 204 من اليسار (أو تكون الفاتورة مسجلة بالنظام). لا يتم تفعيل مسح الأصناف إلا بعد فتح الفاتورة للمراجعة!',
         type: 'blocked',
       });
       setTimeout(() => setScannerAlertNotice(null), 5000);
@@ -270,8 +276,7 @@ export function App() {
       return;
     }
 
-    const masterItems = await getInvoiceMasterItems(cleanInvoice);
-    const incomplete = await getIncompleteInvoice(cleanInvoice);
+    const masterItems = existingMaster;
 
     const initialItems: Record<string, ScannedAuditItem> = {};
     const now = new Date().toISOString();
@@ -306,7 +311,7 @@ export function App() {
       items: initialItems,
       isLocked: true,
       lastScannedItemCode: null,
-      longBarcodePolicy: 'ALLOW',
+      longBarcodePolicy: 'ASK',
     };
 
     await saveActiveSession(newSession);
@@ -323,17 +328,36 @@ export function App() {
     const cleanCode = code.trim();
     if (!cleanCode) return;
 
-    // Enforce condition: Alert if barcode is greater than 10 digits (> 10 digits) and DO NOT complete scan!
-    // Scanning is performed for codes <= 10 digits.
-    if (cleanCode.length > 10) {
-      if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
-      if (settings.vibrationEnabled) SoundEffects.vibrate([150, 80, 150]);
-      setScannerAlertNotice({
-        message: `⚠️ تنبيه رقابي: كود الصنف [${cleanCode}] أكبر من عشرة أرقام (${cleanCode.length} خانة). تم إيقاف المسح لأن النظام يقبل فقط الأكواد حتى 10 أرقام!`,
-        type: 'blocked',
-      });
-      setTimeout(() => setScannerAlertNotice(null), 5000);
-      return;
+    const threshold = settings.longBarcodeThreshold || 10;
+    const isLongBarcode = cleanCode.length > threshold;
+
+    if (isLongBarcode) {
+      const policy: LongBarcodePolicy = currentSession.longBarcodePolicy || 'ASK';
+
+      if (policy === 'BLOCK') {
+        if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume * 0.5);
+        if (settings.vibrationEnabled) SoundEffects.vibrate([150, 80, 150]);
+        setScannerAlertNotice({
+          message: `⚠️ تم إيقاف المسح: كود الصنف [${cleanCode}] أكبر من ${threshold} أرقام (${cleanCode.length} خانة) ومحظور وفقاً لقواعد الجلسة.`,
+          type: 'blocked',
+        });
+        setTimeout(() => setScannerAlertNotice(null), 4000);
+        return;
+      }
+
+      if (policy === 'ASK') {
+        if (settings.soundEnabled) SoundEffects.playLongBarcodeAlert(settings.soundVolume);
+        if (settings.vibrationEnabled) SoundEffects.vibrate([150, 80, 150]);
+        setScannerAlertNotice({
+          message: `⚠️ تنبيه رقابي: كود الصنف [${cleanCode}] أكبر من ${threshold} أرقام (${cleanCode.length} خانة). يرجى مراجعة شاشة التدقيق لاتخاذ القرار (سماح / عدم السماح).`,
+          type: 'warning',
+        });
+        setCurrentTab('audit');
+        setTimeout(() => setScannerAlertNotice(null), 5000);
+        return;
+      }
+
+      // If policy === 'ALLOW': Proceed directly to record!
     }
 
     const session = { ...currentSession };
@@ -420,24 +444,27 @@ export function App() {
       return;
     }
 
-    const matchesInvoicePattern = isInvoiceOrOrderNumberPattern(clean);
+    const isPattern = isInvoiceOrOrderNumberPattern(clean);
+    const existingMaster = await getInvoiceMasterItems(clean);
+    const incomplete = await getIncompleteInvoice(clean);
+    const matchesInvoicePattern = isPattern || existingMaster.length > 0 || Boolean(incomplete);
 
     if (!activeSession) {
       // Step A: No invoice is currently open
-      // Enforce rule: Restrict scanning strictly to invoice/order pattern starting with 200 or 204
+      // Enforce rule: Restrict scanning strictly to invoice/order pattern starting with 200 or 204 or in system
       // Do not activate item scans until an invoice is opened!
       if (!matchesInvoicePattern) {
         if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
         if (settings.vibrationEnabled) SoundEffects.vibrate([200, 100, 200]);
         setScannerAlertNotice({
-          message: '⚠️ تنبيه رقابي: يجب مسح باركود الفاتورة أو الطلب أولاً (يبدأ بـ 200 أو 204 من اليسار). لا يتم تفعيل مسح الأصناف إلا بعد فتح الفاتورة للمراجعة!',
+          message: '⚠️ تنبيه رقابي: يجب مسح باركود الفاتورة أو الطلب أولاً (يبدأ بـ 200 أو 204 من اليسار أو مسجل بالنظام). لا يتم تفعيل مسح الأصناف إلا بعد فتح الفاتورة للمراجعة!',
           type: 'blocked',
         });
         setTimeout(() => setScannerAlertNotice(null), 5000);
         return;
       }
 
-      // Valid 200 or 204 pattern: Lock onto invoice!
+      // Valid invoice: Lock onto invoice!
       await lockInvoiceByBarcode(clean);
     } else {
       // Step B: Invoice is OPEN FOR REVIEW
@@ -479,19 +506,7 @@ export function App() {
         handleInvoiceCompleted(prevSession.invoiceNo, cleanDiscarded, discrepanciesToArchive);
         await lockInvoiceByBarcode(clean);
       } else {
-        // Step C: Item scan within active invoice session
-        // Enforce rule: Alert if barcode is greater than 10 digits (> 10 digits) and DO NOT complete scan!
-        if (clean.length > 10) {
-          if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
-          if (settings.vibrationEnabled) SoundEffects.vibrate([150, 80, 150]);
-          setScannerAlertNotice({
-            message: `⚠️ تنبيه رقابي: كود الصنف [${clean}] أكبر من عشرة أرقام (${clean.length} خانة). تم إيقاف المسح لأن النظام يقبل فقط الأكواد حتى 10 أرقام!`,
-            type: 'blocked',
-          });
-          setTimeout(() => setScannerAlertNotice(null), 5000);
-          return;
-        }
-
+        // Step C: Item scan within active invoice session (scanItemByBarcode handles threshold & policy)
         await scanItemByBarcode(clean, activeSession);
       }
     }

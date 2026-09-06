@@ -1817,20 +1817,20 @@ export function isInvoiceOrOrderNumberPattern(code: string): boolean {
 }
 
 /**
- * Checks whether item barcode meets the requirement of being 10 digits or less (<= 10 digits).
- * Item barcodes <= 10 digits are scanned and accepted.
- * Item barcodes > 10 digits trigger alert and reject/block scanning.
+ * Checks whether item barcode meets standard threshold (<= 10 digits by default).
+ * Barcodes <= threshold are scanned and recorded directly.
+ * Barcodes > threshold trigger alert sound and confirmation/approval policy.
  */
-export function isItemBarcodeValidLength(barcode: string): boolean {
+export function isItemBarcodeValidLength(barcode: string, threshold = 10): boolean {
   if (!barcode) return false;
-  return barcode.trim().length <= 10;
+  return barcode.trim().length <= threshold;
 }
 
 /**
- * Checks whether item barcode is strictly longer than 10 digits (> 10 digits).
+ * Checks whether item barcode is strictly longer than the threshold (> 10 digits).
  */
-export function isItemBarcodeLongerThan10(barcode: string): boolean {
+export function isItemBarcodeLongerThan10(barcode: string, threshold = 10): boolean {
   if (!barcode) return false;
-  return barcode.trim().length > 10;
+  return barcode.trim().length > threshold;
 }
 

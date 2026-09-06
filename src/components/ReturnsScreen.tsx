@@ -251,19 +251,6 @@ export const ReturnsScreen: React.FC<ReturnsScreenProps> = ({
     }
 
     // 3. Otherwise: Process as Item Barcode
-    // Strict rule: Alert if barcode is greater than 10 digits (> 10 digits) and DO NOT complete scan!
-    // Scanning is performed for codes <= 10 digits.
-    if (clean.length > 10) {
-      if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
-      setScanNotification({
-        message: isRtl 
-          ? `⚠️ تنبيه رقابي: كود الصنف (${clean}) أكبر من عشرة أرقام (${clean.length} خانة). تم إيقاف المسح لأن النظام يقبل فقط الأكواد حتى 10 أرقام!`
-          : `⚠️ Restricted: Item barcode (${clean}) is longer than 10 digits (${clean.length}). Scan blocked by policy.`,
-        type: 'ERROR'
-      });
-      return;
-    }
-
     setReturnItems(prev => {
       // Prioritize items where scannedQty < invoicedQty for smooth multi-invoice workflow
       const pendingIdx = prev.findIndex(i => i.itemCode.toLowerCase() === clean.toLowerCase() && (i.scannedQty || 0) < i.invoicedQty);

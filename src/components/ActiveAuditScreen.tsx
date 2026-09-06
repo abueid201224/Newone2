@@ -218,15 +218,20 @@ export const ActiveAuditScreen: React.FC<ActiveAuditScreenProps> = ({
     const cleanInput = invoiceNoInput.trim();
     if (!cleanInput) return;
 
-    // Restriction: Invoices and Orders must start with 200 or 204 from the left
-    if (!forceReopen && !isInvoiceOrOrderNumberPattern(cleanInput)) {
+    // Restriction: Invoices and Orders must start with 200 or 204 from the left, or exist in master/incomplete data
+    const isPattern = isInvoiceOrOrderNumberPattern(cleanInput);
+    const existingMaster = await getInvoiceMasterItems(cleanInput);
+    const savedIncomplete = await getIncompleteInvoice(cleanInput);
+    const isValidInvoice = isPattern || existingMaster.length > 0 || Boolean(savedIncomplete);
+
+    if (!forceReopen && !isValidInvoice) {
       if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
       if (settings.vibrationEnabled) SoundEffects.vibrate([200, 100, 200]);
       setRecentScanFeedback({
         code: cleanInput,
         message: isRtl 
-          ? '⚠️ تنبيه رقابي: نمط رقم الفاتورة أو الطلب يجب أن يبدأ بـ 200 أو 204 من اليسار. لا يتم تفعيل مسح الأصناف إلا بعد فتح الفاتورة للمراجعة!'
-          : '⚠️ Restricted: Invoice or Order # must start with 200 or 204 from the left. Item scanning is not activated until invoice is opened for review!',
+          ? '⚠️ تنبيه رقابي: نمط رقم الفاتورة أو الطلب يجب أن يبدأ بـ 200 أو 204 من اليسار (أو تكون الفاتورة مسجلة بالنظام). لا يتم تفعيل مسح الأصناف إلا بعد فتح الفاتورة للمراجعة!'
+          : '⚠️ Restricted: Invoice or Order # must start with 200 or 204 from the left (or exist in system). Item scanning is not activated until invoice is opened for review!',
         type: 'blocked',
       });
       focusAndClearInput();
@@ -474,46 +479,52 @@ export const ActiveAuditScreen: React.FC<ActiveAuditScreenProps> = ({
     const cleanCode = scannedItemCode.trim();
     if (!cleanCode) return;
 
-    // Enforce condition: Alert if barcode is greater than 10 digits (> 10 digits) and DO NOT complete scan automatically!
-    // Scanning is performed for codes <= 10 digits.
-    if (cleanCode.length > 10) {
-      if (settings.soundEnabled) SoundEffects.playLongBarcodeAlert(settings.soundVolume);
-      if (settings.vibrationEnabled) SoundEffects.vibrate([150, 80, 150]);
+    const threshold = settings.longBarcodeThreshold || 10;
+    const isLongBarcode = cleanCode.length > threshold;
 
+    if (isLongBarcode) {
       const policy: LongBarcodePolicy = activeSession.longBarcodePolicy || 'ASK';
 
       if (policy === 'BLOCK') {
         // Automatically reject/ignore without popping up modal
+        if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume * 0.5);
         setRecentScanFeedback({
           code: cleanCode,
           message: isRtl 
-            ? `⚠️ تم إيقاف المسح: كود الصنف [${cleanCode}] أكبر من عشرة أرقام (${cleanCode.length} خانة) ومحظور وفقاً لقواعد الجلسة.`
-            : `⚠️ Scan stopped: Barcode [${cleanCode}] is > 10 digits (${cleanCode.length}) and blocked by policy.`,
+            ? `⚠️ تم إيقاف المسح: كود الصنف [${cleanCode}] أكبر من ${threshold} أرقام (${cleanCode.length} خانة) ومحظور وفقاً لقواعد الجلسة.`
+            : `⚠️ Scan stopped: Barcode [${cleanCode}] is > ${threshold} digits (${cleanCode.length}) and blocked by policy.`,
           type: 'blocked',
         });
         focusAndClearInput();
         return;
       }
 
-      // If policy is 'ASK': show prompt & alert notice as originally
-      setRecentScanFeedback({
-        code: cleanCode,
-        message: isRtl 
-          ? `⚠️ تنبيه رقابي: كود الصنف [${cleanCode}] أكبر من عشرة أرقام (${cleanCode.length} خانة). لم يتم إتمام المسح بانتظار قرار الرقابة.`
-          : `⚠️ Warning: Item code [${cleanCode}] is longer than 10 digits (${cleanCode.length}). Scan not completed pending approval.`,
-        type: 'mismatch',
-      });
+      if (policy === 'ASK') {
+        // Enforce condition: Alert if barcode is greater than 10 digits and DO NOT complete scan automatically!
+        if (settings.soundEnabled) SoundEffects.playLongBarcodeAlert(settings.soundVolume);
+        if (settings.vibrationEnabled) SoundEffects.vibrate([150, 80, 150]);
 
-      setLongBarcodePrompt({
-        isOpen: true,
-        barcode: cleanCode,
-        length: cleanCode.length,
-      });
-      focusAndClearInput();
-      return;
+        setRecentScanFeedback({
+          code: cleanCode,
+          message: isRtl 
+            ? `⚠️ تنبيه رقابي: كود الصنف [${cleanCode}] أكبر من ${threshold} أرقام (${cleanCode.length} خانة). لم يتم إتمام المسح بانتظار قرار الرقابة.`
+            : `⚠️ Warning: Item code [${cleanCode}] is longer than ${threshold} digits (${cleanCode.length}). Scan not completed pending approval.`,
+          type: 'mismatch',
+        });
+
+        setLongBarcodePrompt({
+          isOpen: true,
+          barcode: cleanCode,
+          length: cleanCode.length,
+        });
+        focusAndClearInput();
+        return;
+      }
+
+      // If policy === 'ALLOW': Proceed directly to record barcode
     }
 
-    // Normal item recording
+    // Normal item recording (codes <= threshold, or after ALLOW)
     await executeRecordItemScan(cleanCode, activeSession);
     focusAndClearInput();
   };
@@ -843,7 +854,10 @@ export const ActiveAuditScreen: React.FC<ActiveAuditScreenProps> = ({
     const code = manualInput.trim();
     if (!code) return;
 
-    const matchesInvoicePattern = isInvoiceOrOrderNumberPattern(code);
+    const isPattern = isInvoiceOrOrderNumberPattern(code);
+    const existingMaster = await getInvoiceMasterItems(code);
+    const savedIncomplete = await getIncompleteInvoice(code);
+    const matchesInvoicePattern = isPattern || existingMaster.length > 0 || Boolean(savedIncomplete);
 
     if (!activeSession) {
       if (!matchesInvoicePattern) {
@@ -852,8 +866,8 @@ export const ActiveAuditScreen: React.FC<ActiveAuditScreenProps> = ({
         setRecentScanFeedback({
           code,
           message: isRtl 
-            ? '⚠️ تنبيه رقابي: نمط رقم الفاتورة أو الطلب يجب أن يبدأ بـ 200 أو 204 من اليسار. لا يتم تفعيل مسح الأصناف إلا بعد فتح الفاتورة للمراجعة!'
-            : '⚠️ Restricted: Invoice or Order # must start with 200 or 204 from the left. Item scanning is not activated until invoice is opened for review!',
+            ? '⚠️ تنبيه رقابي: نمط رقم الفاتورة أو الطلب يجب أن يبدأ بـ 200 أو 204 من اليسار (أو تكون الفاتورة مسجلة بالنظام). لا يتم تفعيل مسح الأصناف إلا بعد فتح الفاتورة للمراجعة!'
+            : '⚠️ Restricted: Invoice or Order # must start with 200 or 204 from the left (or exist in system). Item scanning is not activated until invoice is opened for review!',
           type: 'blocked',
         });
         focusAndClearInput();
