@@ -323,12 +323,13 @@ export function App() {
     const cleanCode = code.trim();
     if (!cleanCode) return;
 
-    // Enforce condition: Barcode MUST be longer than 10 digits (> 10 digits)
-    if (!isItemBarcodeValidLength(cleanCode)) {
+    // Enforce condition: Alert if barcode is greater than 10 digits (> 10 digits) and DO NOT complete scan!
+    // Scanning is performed for codes <= 10 digits.
+    if (cleanCode.length > 10) {
       if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
       if (settings.vibrationEnabled) SoundEffects.vibrate([150, 80, 150]);
       setScannerAlertNotice({
-        message: `⚠️ تم رفض الصنف: شرط النظام يتطلب أن يكون باركود الصنف أطول من 10 أرقام (> 10 خانات). الكود الحالي: [${cleanCode}] مكون من ${cleanCode.length} خانات فقط.`,
+        message: `⚠️ تنبيه رقابي: كود الصنف [${cleanCode}] أكبر من عشرة أرقام (${cleanCode.length} خانة). تم إيقاف المسح لأن النظام يقبل فقط الأكواد حتى 10 أرقام!`,
         type: 'blocked',
       });
       setTimeout(() => setScannerAlertNotice(null), 5000);
@@ -479,12 +480,12 @@ export function App() {
         await lockInvoiceByBarcode(clean);
       } else {
         // Step C: Item scan within active invoice session
-        // Enforce rule: Item barcode MUST be longer than 10 digits (> 10 digits)
-        if (!isItemBarcodeValidLength(clean)) {
+        // Enforce rule: Alert if barcode is greater than 10 digits (> 10 digits) and DO NOT complete scan!
+        if (clean.length > 10) {
           if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
           if (settings.vibrationEnabled) SoundEffects.vibrate([150, 80, 150]);
           setScannerAlertNotice({
-            message: `⚠️ تم رفض الصنف: شرط النظام يتطلب أن يكون باركود الصنف أطول من 10 أرقام (> 10 خانات). الكود الحالي: [${clean}] مكون من ${clean.length} خانات فقط.`,
+            message: `⚠️ تنبيه رقابي: كود الصنف [${clean}] أكبر من عشرة أرقام (${clean.length} خانة). تم إيقاف المسح لأن النظام يقبل فقط الأكواد حتى 10 أرقام!`,
             type: 'blocked',
           });
           setTimeout(() => setScannerAlertNotice(null), 5000);

@@ -24,7 +24,8 @@ import {
   BookOpen,
   HelpCircle,
   Home,
-  ShieldCheck
+  ShieldCheck,
+  ExternalLink
 } from 'lucide-react';
 import type { SyncMetadata, AppSettings } from '../types';
 import { translations } from '../services/i18n';
@@ -147,6 +148,19 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Action Controls & Sync Button */}
         <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Open in Separate Tab Button */}
+          <a
+            href={window.location.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            id="navbar-open-new-tab-btn"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-sky-500/40 bg-sky-950/40 hover:bg-sky-900/60 text-xs font-bold text-sky-300 transition-all shadow-sm active:scale-95"
+            title={isRtl ? 'فتح المعاينة في تبويب منفصل بالكامل' : 'Open preview in a separate tab'}
+          >
+            <ExternalLink className="w-4 h-4 text-sky-400" />
+            <span className="hidden sm:inline">{isRtl ? 'تبويب منفصل ↗' : 'New Tab ↗'}</span>
+          </a>
+
           {/* Logic & Math Guide Modal Button */}
           {onOpenLogicGuide && (
             <button

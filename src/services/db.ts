@@ -1817,9 +1817,19 @@ export function isInvoiceOrOrderNumberPattern(code: string): boolean {
 }
 
 /**
- * Checks whether item barcode meets the requirement of being strictly longer than 10 digits (> 10 digits).
+ * Checks whether item barcode meets the requirement of being 10 digits or less (<= 10 digits).
+ * Item barcodes <= 10 digits are scanned and accepted.
+ * Item barcodes > 10 digits trigger alert and reject/block scanning.
  */
 export function isItemBarcodeValidLength(barcode: string): boolean {
+  if (!barcode) return false;
+  return barcode.trim().length <= 10;
+}
+
+/**
+ * Checks whether item barcode is strictly longer than 10 digits (> 10 digits).
+ */
+export function isItemBarcodeLongerThan10(barcode: string): boolean {
   if (!barcode) return false;
   return barcode.trim().length > 10;
 }

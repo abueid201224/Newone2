@@ -251,13 +251,14 @@ export const ReturnsScreen: React.FC<ReturnsScreenProps> = ({
     }
 
     // 3. Otherwise: Process as Item Barcode
-    // Strict rule: Barcode MUST be longer than 10 digits (> 10 digits)
-    if (clean.length <= 10) {
+    // Strict rule: Alert if barcode is greater than 10 digits (> 10 digits) and DO NOT complete scan!
+    // Scanning is performed for codes <= 10 digits.
+    if (clean.length > 10) {
       if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
       setScanNotification({
         message: isRtl 
-          ? `⚠️ تم رفض باركود الصنف: شرط النظام يتطلب أن يكون الباركود أطول من 10 أرقام (> 10 خانات). الحالي (${clean}) يتكون من ${clean.length} خانات فقط.`
-          : `⚠️ Rejected: Item barcode must be longer than 10 digits (> 10). Current code (${clean}) is ${clean.length} digits only.`,
+          ? `⚠️ تنبيه رقابي: كود الصنف (${clean}) أكبر من عشرة أرقام (${clean.length} خانة). تم إيقاف المسح لأن النظام يقبل فقط الأكواد حتى 10 أرقام!`
+          : `⚠️ Restricted: Item barcode (${clean}) is longer than 10 digits (${clean.length}). Scan blocked by policy.`,
         type: 'ERROR'
       });
       return;

@@ -22,7 +22,8 @@ import {
   ShieldCheck,
   Zap,
   Lock,
-  RefreshCw
+  RefreshCw,
+  ExternalLink
 } from 'lucide-react';
 import type { ActiveNavTab } from './Navbar';
 import type { AppSettings, SyncMetadata, ActiveInvoiceSession } from '../types';
@@ -496,6 +497,18 @@ export const VerticalServicesDrawer: React.FC<VerticalServicesDrawerProps> = ({
               <span>{isRtl ? 'دليل المنطق والمعادلات والحلول الرقابية 💡' : 'Logic & Math Formulas Guide'}</span>
             </button>
           )}
+
+          {/* Open in New Window / Tab Link */}
+          <a
+            href={window.location.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full py-2 px-3 bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 rounded-xl text-xs font-bold border border-sky-700/40 flex items-center justify-center gap-2 transition-all shadow-sm"
+            title={isRtl ? 'فتح المعاينة في تبويب منفصل بكامل الشاشة' : 'Open preview in a separate tab'}
+          >
+            <ExternalLink className="w-3.5 h-3.5 text-sky-400" />
+            <span>{isRtl ? 'فتح المعاينة في تبويب منفصل ↗' : 'Open Preview in New Tab ↗'}</span>
+          </a>
 
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
             {onOpenFirebaseModal && (

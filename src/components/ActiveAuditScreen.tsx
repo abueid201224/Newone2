@@ -474,56 +474,43 @@ export const ActiveAuditScreen: React.FC<ActiveAuditScreenProps> = ({
     const cleanCode = scannedItemCode.trim();
     if (!cleanCode) return;
 
-    // Enforce condition: Barcode MUST be strictly longer than 10 digits (> 10 digits)
-    if (!isItemBarcodeValidLength(cleanCode)) {
-      if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
+    // Enforce condition: Alert if barcode is greater than 10 digits (> 10 digits) and DO NOT complete scan automatically!
+    // Scanning is performed for codes <= 10 digits.
+    if (cleanCode.length > 10) {
+      if (settings.soundEnabled) SoundEffects.playLongBarcodeAlert(settings.soundVolume);
       if (settings.vibrationEnabled) SoundEffects.vibrate([150, 80, 150]);
-      setRecentScanFeedback({
-        code: cleanCode,
-        message: isRtl 
-          ? `⚠️ تم رفض الصنف: شرط النظام يتطلب أن يكون باركود الصنف أطول من 10 أرقام (> 10 خانات). الكود الحالي [${cleanCode}] يتكون من ${cleanCode.length} خانات فقط.`
-          : `⚠️ Item rejected: Barcode must be longer than 10 digits (> 10). Current code [${cleanCode}] is ${cleanCode.length} digits only.`,
-        type: 'blocked',
-      });
-      focusAndClearInput();
-      return;
-    }
 
-    const threshold = settings.longBarcodeThreshold || 10;
-    const isLongBarcode = cleanCode.length > threshold;
-
-    if (isLongBarcode) {
       const policy: LongBarcodePolicy = activeSession.longBarcodePolicy || 'ASK';
 
       if (policy === 'BLOCK') {
         // Automatically reject/ignore without popping up modal
-        if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume * 0.5);
         setRecentScanFeedback({
           code: cleanCode,
           message: isRtl 
-            ? `⚠️ تم تجاهل الباركود [${cleanCode}] (${cleanCode.length} رقم) تلقائياً وفقاً لقرار عدم السماح لهذه الجلسة.`
-            : `⚠️ Barcode [${cleanCode}] (${cleanCode.length} digits) blocked according to session policy.`,
+            ? `⚠️ تم إيقاف المسح: كود الصنف [${cleanCode}] أكبر من عشرة أرقام (${cleanCode.length} خانة) ومحظور وفقاً لقواعد الجلسة.`
+            : `⚠️ Scan stopped: Barcode [${cleanCode}] is > 10 digits (${cleanCode.length}) and blocked by policy.`,
           type: 'blocked',
         });
         focusAndClearInput();
         return;
       }
 
-      if (policy === 'ASK') {
-        // Trigger alert sound & open the 3-option modal
-        if (settings.soundEnabled) SoundEffects.playLongBarcodeAlert(settings.soundVolume);
-        if (settings.vibrationEnabled) SoundEffects.vibrate([150, 80, 150]);
+      // If policy is 'ASK': show prompt & alert notice as originally
+      setRecentScanFeedback({
+        code: cleanCode,
+        message: isRtl 
+          ? `⚠️ تنبيه رقابي: كود الصنف [${cleanCode}] أكبر من عشرة أرقام (${cleanCode.length} خانة). لم يتم إتمام المسح بانتظار قرار الرقابة.`
+          : `⚠️ Warning: Item code [${cleanCode}] is longer than 10 digits (${cleanCode.length}). Scan not completed pending approval.`,
+        type: 'mismatch',
+      });
 
-        setLongBarcodePrompt({
-          isOpen: true,
-          barcode: cleanCode,
-          length: cleanCode.length,
-        });
-        focusAndClearInput();
-        return;
-      }
-
-      // If policy === 'ALLOW': Proceed directly to record barcode without alert
+      setLongBarcodePrompt({
+        isOpen: true,
+        barcode: cleanCode,
+        length: cleanCode.length,
+      });
+      focusAndClearInput();
+      return;
     }
 
     // Normal item recording

@@ -119,10 +119,11 @@ export const ReceivingScreen: React.FC<ReceivingScreenProps> = ({
     const clean = lastScannedCode.trim();
     if (!clean) return;
 
-    // Strict rule: Barcode MUST be longer than 10 digits (> 10 digits)
-    if (clean.length <= 10) {
+    // Strict rule: Alert if barcode is greater than 10 digits (> 10 digits) and DO NOT complete scan!
+    // Scanning is performed for codes <= 10 digits.
+    if (clean.length > 10) {
       if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
-      setImportNotice(`⚠️ تم رفض الباركود: شرط النظام يتطلب أن يكون باركود الصنف أطول من 10 أرقام (> 10 خانات). الباركود [${clean}] مكون من ${clean.length} خانات فقط.`);
+      setImportNotice(`⚠️ تنبيه رقابي: كود الصنف [${clean}] أكبر من عشرة أرقام (${clean.length} خانة). تم إيقاف المسح لأن النظام يقبل فقط الأكواد حتى 10 أرقام!`);
       setTimeout(() => setImportNotice(null), 5000);
       return;
     }
@@ -310,9 +311,9 @@ export const ReceivingScreen: React.FC<ReceivingScreenProps> = ({
     const clean = manualBarcode.trim();
     if (!clean) return;
 
-    if (clean.length <= 10) {
+    if (clean.length > 10) {
       if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
-      setImportNotice(`⚠️ تم رفض الباركود: شرط النظام يتطلب أن يكون باركود الصنف أطول من 10 أرقام (> 10 خانات). الباركود [${clean}] مكون من ${clean.length} خانات فقط.`);
+      setImportNotice(`⚠️ تنبيه رقابي: كود الصنف [${clean}] أكبر من عشرة أرقام (${clean.length} خانة). تم إيقاف الإضافة لأن النظام يقبل فقط الأكواد حتى 10 أرقام!`);
       setTimeout(() => setImportNotice(null), 5000);
       return;
     }
