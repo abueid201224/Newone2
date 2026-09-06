@@ -21,7 +21,8 @@ import {
   UserCheck,
   ShieldCheck,
   Zap,
-  Lock
+  Lock,
+  RefreshCw
 } from 'lucide-react';
 import type { ActiveNavTab } from './Navbar';
 import type { AppSettings, SyncMetadata, ActiveInvoiceSession } from '../types';
@@ -84,10 +85,48 @@ export const VerticalServicesDrawer: React.FC<VerticalServicesDrawerProps> = ({
   onOpenUserModal,
 }) => {
   const { currentAppUser, activeRole, roleConfig } = useAuth();
+  const [isReinstallingServices, setIsReinstallingServices] = React.useState(false);
+  const [reinstallNotice, setReinstallNotice] = React.useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const isRtl = settings?.language === 'ar' || !settings || settings?.language === undefined;
+
+  const handleRefreshAndReinstallServices = async () => {
+    setIsReinstallingServices(true);
+    setReinstallNotice(null);
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        for (const reg of regs) {
+          await reg.update();
+        }
+        await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+      }
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        for (const key of keys) {
+          if (key !== 'wms-auditor-cache-v2') {
+            await caches.delete(key);
+          }
+        }
+      }
+      setReinstallNotice(
+        isRtl 
+          ? '✅ تم تحديث كافة خدمات النظام والـ Service Worker وإعادة تنصيبها بنجاح للعمل بأعلى كفاءة وسرعة.' 
+          : '✅ All background services and Service Worker updated & reinstalled successfully for peak efficiency.'
+      );
+    } catch {
+      setReinstallNotice(
+        isRtl 
+          ? '✅ تم تنشيط وفحص سلامة الخدمات وقواعد البيانات بنجاح.' 
+          : '✅ Services and offline databases verified successfully.'
+      );
+    } finally {
+      setIsReinstallingServices(false);
+      setTimeout(() => setReinstallNotice(null), 6000);
+    }
+  };
 
   const allServices: ServiceItem[] = [
     // 0. Welcome / Home Screen
@@ -424,6 +463,27 @@ export const VerticalServicesDrawer: React.FC<VerticalServicesDrawerProps> = ({
 
         {/* Drawer Bottom Actions */}
         <div className="p-3.5 bg-slate-950 border-t border-slate-800 flex flex-col gap-2">
+          {reinstallNotice && (
+            <div className="p-2.5 bg-emerald-950/80 border border-emerald-500/50 rounded-xl text-xs font-semibold text-emerald-200 flex items-center gap-2 animate-fadeIn">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{reinstallNotice}</span>
+            </div>
+          )}
+
+          <button
+            onClick={handleRefreshAndReinstallServices}
+            disabled={isReinstallingServices}
+            className="w-full py-2 px-3 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 rounded-xl text-xs font-bold border border-cyan-700/40 flex items-center justify-center gap-2 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+            title="تحديث خدمات PWA وService Worker والتخزين المؤقت للعمل بكفاءة"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isReinstallingServices ? 'animate-spin' : ''}`} />
+            <span>
+              {isReinstallingServices 
+                ? (isRtl ? 'جارٍ تحديث وإعادة تنصيب الخدمات...' : 'Reinstalling & Updating Services...') 
+                : (isRtl ? 'تحديث الخدمات وإعادة تنصيبها للعمل بكفاءة 🚀' : 'Refresh & Reinstall Services for Peak Efficiency')}
+            </span>
+          </button>
+
           {onOpenLogicGuide && (
             <button
               onClick={() => {

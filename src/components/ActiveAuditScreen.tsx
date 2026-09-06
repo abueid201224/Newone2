@@ -67,7 +67,9 @@ import {
   isBatchClosedAndCountersZeroed,
   resetActiveBatchCountersState,
   getAllAuditDiscrepancies,
-  getAllWrongPickings
+  getAllWrongPickings,
+  isInvoiceOrOrderNumberPattern,
+  isItemBarcodeValidLength
 } from '../services/db';
 import { SoundEffects } from '../services/audio';
 import { translations } from '../services/i18n';
@@ -215,6 +217,21 @@ export const ActiveAuditScreen: React.FC<ActiveAuditScreenProps> = ({
   const lockInvoiceSession = async (invoiceNoInput: string, forceReopen = false) => {
     const cleanInput = invoiceNoInput.trim();
     if (!cleanInput) return;
+
+    // Restriction: Invoices and Orders must start with 200 or 204 from the left
+    if (!forceReopen && !isInvoiceOrOrderNumberPattern(cleanInput)) {
+      if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
+      if (settings.vibrationEnabled) SoundEffects.vibrate([200, 100, 200]);
+      setRecentScanFeedback({
+        code: cleanInput,
+        message: isRtl 
+          ? '⚠️ تنبيه رقابي: نمط رقم الفاتورة أو الطلب يجب أن يبدأ بـ 200 أو 204 من اليسار. لا يتم تفعيل مسح الأصناف إلا بعد فتح الفاتورة للمراجعة!'
+          : '⚠️ Restricted: Invoice or Order # must start with 200 or 204 from the left. Item scanning is not activated until invoice is opened for review!',
+        type: 'blocked',
+      });
+      focusAndClearInput();
+      return;
+    }
 
     // Reset previous batch counters record when starting a fresh scan
     if (isBatchZeroed) {
@@ -456,6 +473,21 @@ export const ActiveAuditScreen: React.FC<ActiveAuditScreenProps> = ({
     if (!activeSession) return;
     const cleanCode = scannedItemCode.trim();
     if (!cleanCode) return;
+
+    // Enforce condition: Barcode MUST be strictly longer than 10 digits (> 10 digits)
+    if (!isItemBarcodeValidLength(cleanCode)) {
+      if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
+      if (settings.vibrationEnabled) SoundEffects.vibrate([150, 80, 150]);
+      setRecentScanFeedback({
+        code: cleanCode,
+        message: isRtl 
+          ? `⚠️ تم رفض الصنف: شرط النظام يتطلب أن يكون باركود الصنف أطول من 10 أرقام (> 10 خانات). الكود الحالي [${cleanCode}] يتكون من ${cleanCode.length} خانات فقط.`
+          : `⚠️ Item rejected: Barcode must be longer than 10 digits (> 10). Current code [${cleanCode}] is ${cleanCode.length} digits only.`,
+        type: 'blocked',
+      });
+      focusAndClearInput();
+      return;
+    }
 
     const threshold = settings.longBarcodeThreshold || 10;
     const isLongBarcode = cleanCode.length > threshold;
@@ -741,6 +773,14 @@ export const ActiveAuditScreen: React.FC<ActiveAuditScreenProps> = ({
       allItems.filter(i => i.codeStatus === 'MATCH').length
     );
 
+    setRecentScanFeedback({
+      code: session.invoiceNo,
+      message: isRtl 
+        ? '✅ تم إنهاء مراجعة الفاتورة بنجاح. القارئ جاهز لمسح فاتورة جديدة تبدأ بـ 200 أو 204 من اليسار (لا يُفعل مسح الأصناف إلا بعد فتح الفاتورة).'
+        : '✅ Invoice review completed. Ready to scan new invoice/order (starts with 200 or 204 from left).',
+      type: 'exact',
+    });
+
     focusAndClearInput();
 
     if (nextInvoiceToLock && nextInvoiceToLock !== session.invoiceNo) {
@@ -816,14 +856,25 @@ export const ActiveAuditScreen: React.FC<ActiveAuditScreenProps> = ({
     const code = manualInput.trim();
     if (!code) return;
 
+    const matchesInvoicePattern = isInvoiceOrOrderNumberPattern(code);
+
     if (!activeSession) {
+      if (!matchesInvoicePattern) {
+        if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
+        if (settings.vibrationEnabled) SoundEffects.vibrate([200, 100, 200]);
+        setRecentScanFeedback({
+          code,
+          message: isRtl 
+            ? '⚠️ تنبيه رقابي: نمط رقم الفاتورة أو الطلب يجب أن يبدأ بـ 200 أو 204 من اليسار. لا يتم تفعيل مسح الأصناف إلا بعد فتح الفاتورة للمراجعة!'
+            : '⚠️ Restricted: Invoice or Order # must start with 200 or 204 from the left. Item scanning is not activated until invoice is opened for review!',
+          type: 'blocked',
+        });
+        focusAndClearInput();
+        return;
+      }
       await lockInvoiceSession(code);
     } else {
-      const isKnownInvoice = availableInvoices.some(inv => 
-        inv.invoiceNo.toLowerCase() === code.toLowerCase() || 
-        (inv.orderNo && inv.orderNo.toLowerCase() === code.toLowerCase())
-      );
-      if (isKnownInvoice && code.toLowerCase() !== activeSession.invoiceNo.toLowerCase() && code.toLowerCase() !== activeSession.orderNo?.toLowerCase()) {
+      if (matchesInvoicePattern && code.toLowerCase() !== activeSession.invoiceNo.toLowerCase() && code.toLowerCase() !== (activeSession.orderNo || '').toLowerCase()) {
         // Completing current and switching to next
         await handleFinalizeInvoice(false, code);
       } else {

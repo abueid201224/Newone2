@@ -119,6 +119,14 @@ export const ReceivingScreen: React.FC<ReceivingScreenProps> = ({
     const clean = lastScannedCode.trim();
     if (!clean) return;
 
+    // Strict rule: Barcode MUST be longer than 10 digits (> 10 digits)
+    if (clean.length <= 10) {
+      if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
+      setImportNotice(`⚠️ تم رفض الباركود: شرط النظام يتطلب أن يكون باركود الصنف أطول من 10 أرقام (> 10 خانات). الباركود [${clean}] مكون من ${clean.length} خانات فقط.`);
+      setTimeout(() => setImportNotice(null), 5000);
+      return;
+    }
+
     setItems(prev => {
       const idx = prev.findIndex(i => i.itemCode.toLowerCase() === clean.toLowerCase());
       if (idx !== -1) {
@@ -301,6 +309,13 @@ export const ReceivingScreen: React.FC<ReceivingScreenProps> = ({
   const handleAddManual = () => {
     const clean = manualBarcode.trim();
     if (!clean) return;
+
+    if (clean.length <= 10) {
+      if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
+      setImportNotice(`⚠️ تم رفض الباركود: شرط النظام يتطلب أن يكون باركود الصنف أطول من 10 أرقام (> 10 خانات). الباركود [${clean}] مكون من ${clean.length} خانات فقط.`);
+      setTimeout(() => setImportNotice(null), 5000);
+      return;
+    }
 
     const factors = resolveFactors(clean, packagingRules);
     let initCartons = 0;
@@ -1010,8 +1025,29 @@ export const ReceivingScreen: React.FC<ReceivingScreenProps> = ({
                         <td className="p-2.5">
                           <div className="font-bold text-white font-mono">{item.itemCode}</div>
                           <div className="text-[11px] text-slate-400">{item.itemName}</div>
-                          <div className="text-[9px] text-slate-500 font-mono">
-                            معامل الكرتونة: ×{item.cartonFactor || 24} | باكت: ×{item.packFactor || 6}
+                          {/* Editable Packaging and Grouping Factors */}
+                          <div className="flex items-center gap-1.5 mt-1.5 text-[10px] text-slate-300 font-mono bg-slate-950/80 px-2 py-1 rounded-lg border border-slate-800/80 w-fit">
+                            <span className="text-amber-400 font-bold">كرتونة:</span>
+                            <span className="text-slate-500">×</span>
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.cartonFactor || 24}
+                              onChange={(e) => handleUpdateItem(item.id, { cartonFactor: Math.max(1, Number(e.target.value) || 1) })}
+                              className="w-10 bg-slate-900 border border-slate-700 rounded px-1 text-center font-bold text-amber-300 focus:outline-none focus:border-amber-400"
+                              title="تعديل معامل تجميع الكرتونة"
+                            />
+                            <span className="text-slate-600">|</span>
+                            <span className="text-indigo-400 font-bold">باكت:</span>
+                            <span className="text-slate-500">×</span>
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.packFactor || 6}
+                              onChange={(e) => handleUpdateItem(item.id, { packFactor: Math.max(1, Number(e.target.value) || 1) })}
+                              className="w-10 bg-slate-900 border border-slate-700 rounded px-1 text-center font-bold text-indigo-300 focus:outline-none focus:border-indigo-400"
+                              title="تعديل معامل تجميع الباكت"
+                            />
                           </div>
                         </td>
                         <td className="p-2.5 text-center font-mono font-bold text-slate-300">

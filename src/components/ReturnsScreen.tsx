@@ -251,6 +251,18 @@ export const ReturnsScreen: React.FC<ReturnsScreenProps> = ({
     }
 
     // 3. Otherwise: Process as Item Barcode
+    // Strict rule: Barcode MUST be longer than 10 digits (> 10 digits)
+    if (clean.length <= 10) {
+      if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
+      setScanNotification({
+        message: isRtl 
+          ? `⚠️ تم رفض باركود الصنف: شرط النظام يتطلب أن يكون الباركود أطول من 10 أرقام (> 10 خانات). الحالي (${clean}) يتكون من ${clean.length} خانات فقط.`
+          : `⚠️ Rejected: Item barcode must be longer than 10 digits (> 10). Current code (${clean}) is ${clean.length} digits only.`,
+        type: 'ERROR'
+      });
+      return;
+    }
+
     setReturnItems(prev => {
       // Prioritize items where scannedQty < invoicedQty for smooth multi-invoice workflow
       const pendingIdx = prev.findIndex(i => i.itemCode.toLowerCase() === clean.toLowerCase() && (i.scannedQty || 0) < i.invoicedQty);

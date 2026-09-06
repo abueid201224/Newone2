@@ -1807,3 +1807,20 @@ export async function authenticateAppUser(identifier: string, pin: string): Prom
   return null;
 }
 
+/**
+ * Checks whether barcode starts with 200 or 204 from the left (invoice / order pattern).
+ */
+export function isInvoiceOrOrderNumberPattern(code: string): boolean {
+  if (!code) return false;
+  const clean = code.trim();
+  return /^(?:INV-)?(200|204)/i.test(clean) || clean.startsWith('200') || clean.startsWith('204') || /^(?:return|new)(200|204)/i.test(clean);
+}
+
+/**
+ * Checks whether item barcode meets the requirement of being strictly longer than 10 digits (> 10 digits).
+ */
+export function isItemBarcodeValidLength(barcode: string): boolean {
+  if (!barcode) return false;
+  return barcode.trim().length > 10;
+}
+

@@ -25,6 +25,8 @@ import {
   getIncompleteInvoice,
   saveAuditDiscrepancies,
   getAllReturnReports,
+  isInvoiceOrOrderNumberPattern,
+  isItemBarcodeValidLength,
   DEFAULT_SETTINGS
 } from './services/db';
 import { useScannerListener } from './services/scannerListener';
@@ -120,6 +122,7 @@ export function App() {
     totalLineItems: 0,
   });
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<any>(null);
+  const [scannerAlertNotice, setScannerAlertNotice] = useState<{ message: string; type: 'blocked' | 'warning' | 'success' } | null>(null);
 
   // Listen for PWA Install Prompt & Installed status
   useEffect(() => {
@@ -241,11 +244,28 @@ export function App() {
     const cleanInvoice = invoiceNo.trim();
     if (!cleanInvoice) return;
 
+    // Strict rule: Invoice/Order numbers must start with 200 or 204 from the left
+    if (!isInvoiceOrOrderNumberPattern(cleanInvoice)) {
+      if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
+      if (settings.vibrationEnabled) SoundEffects.vibrate([200, 100, 200]);
+      setScannerAlertNotice({
+        message: '⚠️ تنبيه رقابي: نمط رقم الفاتورة أو الطلب يجب أن يبدأ بـ 200 أو 204 من اليسار. لا يتم تفعيل مسح الأصناف إلا بعد فتح الفاتورة للمراجعة!',
+        type: 'blocked',
+      });
+      setTimeout(() => setScannerAlertNotice(null), 5000);
+      return;
+    }
+
     // Check if completed
     const completed = await isInvoiceCompleted(cleanInvoice);
     if (completed) {
       if (settings.soundEnabled) SoundEffects.playAlreadyCompletedBlocked(settings.soundVolume);
       if (settings.vibrationEnabled) SoundEffects.vibrate([200, 100, 200]);
+      setScannerAlertNotice({
+        message: `⚠️ الفاتورة [${cleanInvoice}] تم تدقيقها وإقفالها مسبقاً ولا يمكن تكرار مسحها.`,
+        type: 'warning',
+      });
+      setTimeout(() => setScannerAlertNotice(null), 4000);
       setCurrentTab('audit');
       return;
     }
@@ -286,12 +306,13 @@ export function App() {
       items: initialItems,
       isLocked: true,
       lastScannedItemCode: null,
-      longBarcodePolicy: 'ASK',
+      longBarcodePolicy: 'ALLOW',
     };
 
     await saveActiveSession(newSession);
     setActiveSession(newSession);
     setCurrentTab('audit');
+    setScannerAlertNotice(null);
 
     if (settings.soundEnabled) SoundEffects.playInvoiceLock(settings.soundVolume);
     if (settings.vibrationEnabled) SoundEffects.vibrate(100);
@@ -302,12 +323,15 @@ export function App() {
     const cleanCode = code.trim();
     if (!cleanCode) return;
 
-    const threshold = settings.longBarcodeThreshold || 10;
-    const isLongBarcode = cleanCode.length > threshold;
-    const policy = currentSession.longBarcodePolicy || 'ASK';
-
-    if (isLongBarcode && policy === 'BLOCK') {
-      if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume * 0.5);
+    // Enforce condition: Barcode MUST be longer than 10 digits (> 10 digits)
+    if (!isItemBarcodeValidLength(cleanCode)) {
+      if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
+      if (settings.vibrationEnabled) SoundEffects.vibrate([150, 80, 150]);
+      setScannerAlertNotice({
+        message: `⚠️ تم رفض الصنف: شرط النظام يتطلب أن يكون باركود الصنف أطول من 10 أرقام (> 10 خانات). الكود الحالي: [${cleanCode}] مكون من ${cleanCode.length} خانات فقط.`,
+        type: 'blocked',
+      });
+      setTimeout(() => setScannerAlertNotice(null), 5000);
       return;
     }
 
@@ -365,17 +389,17 @@ export function App() {
         activeInvoiceNo: session.invoiceNo,
         orderNo: session.orderNo,
         itemCode: cleanCode,
-        itemName: belonging?.itemName || 'Unknown Foreign Item',
+        itemName: belonging?.itemName || 'صنف غير مدرج بالفاتورة',
         unit: belonging?.unit || 'PCS',
         actualBelongingInvoiceNo: belonging?.invoiceNo,
         actualBelongingOrderNo: belonging?.orderNo,
         scannedAt: now,
-        auditorName: settings.auditorName || 'Ahmed Hamada',
+        auditorName: settings.auditorName || 'أحمد حمادة',
         auditorId: settings.auditorId || 'AUD-101',
         quantity: 1,
         notes: belonging?.invoiceNo 
-          ? `Belongs to Invoice ${belonging.invoiceNo}${belonging.orderNo ? ` (Order: ${belonging.orderNo})` : ''}`
-          : 'Foreign Item not in master database',
+          ? `يخص فاتورة رقم ${belonging.invoiceNo}${belonging.orderNo ? ` (طلب: ${belonging.orderNo})` : ''}`
+          : 'صنف أجنبي غير موجود بالقاعدة المرجعية',
       });
 
       session.lastActivityAt = now;
@@ -383,23 +407,46 @@ export function App() {
       setActiveSession(session);
       await refreshWrongPickings();
     }
-  }, [settings.longBarcodeThreshold, settings.soundEnabled, settings.soundVolume, settings.vibrationEnabled]);
+  }, [settings.soundEnabled, settings.soundVolume, settings.vibrationEnabled, settings.auditorName, settings.auditorId]);
 
   // Global Hardware 1D Barcode Scanner Keyboard-Wedge Listener
   const handleHardwareScan = useCallback(async (barcode: string) => {
     const clean = barcode.trim();
     if (!clean) return;
 
-    // Check if barcode is an Invoice identifier
-    const existsAsInvoice = await doesInvoiceExist(clean);
-    const looksLikeInvoice = clean.toUpperCase().startsWith(settings.scannerPrefixInvoice.toUpperCase());
+    // Only handle global hardware scan on audit or welcome screen (other tabs handle their own scans via lastScannedBarcode)
+    if (currentTab !== 'audit' && currentTab !== 'welcome') {
+      return;
+    }
+
+    const matchesInvoicePattern = isInvoiceOrOrderNumberPattern(clean);
 
     if (!activeSession) {
-      // Step A: Lock onto Invoice
+      // Step A: No invoice is currently open
+      // Enforce rule: Restrict scanning strictly to invoice/order pattern starting with 200 or 204
+      // Do not activate item scans until an invoice is opened!
+      if (!matchesInvoicePattern) {
+        if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
+        if (settings.vibrationEnabled) SoundEffects.vibrate([200, 100, 200]);
+        setScannerAlertNotice({
+          message: '⚠️ تنبيه رقابي: يجب مسح باركود الفاتورة أو الطلب أولاً (يبدأ بـ 200 أو 204 من اليسار). لا يتم تفعيل مسح الأصناف إلا بعد فتح الفاتورة للمراجعة!',
+          type: 'blocked',
+        });
+        setTimeout(() => setScannerAlertNotice(null), 5000);
+        return;
+      }
+
+      // Valid 200 or 204 pattern: Lock onto invoice!
       await lockInvoiceByBarcode(clean);
     } else {
-      // If user scans a different invoice barcode while an invoice is active -> Automatic Switch & Clean!
-      if ((existsAsInvoice || looksLikeInvoice) && clean.toLowerCase() !== activeSession.invoiceNo.toLowerCase()) {
+      // Step B: Invoice is OPEN FOR REVIEW
+      // Check if this scan is a NEW invoice (starts with 200 or 204 and differs from active invoice/order)
+      const isNewInvoiceScan = matchesInvoicePattern && 
+        clean.toLowerCase() !== activeSession.invoiceNo.toLowerCase() && 
+        clean.toLowerCase() !== (activeSession.orderNo || '').toLowerCase();
+
+      if (isNewInvoiceScan) {
+        // Automatic Switch & Clean for next invoice
         const prevSession = activeSession;
         const allItems: ScannedAuditItem[] = Object.values(prevSession.items);
         const auditedAt = new Date().toISOString();
@@ -413,6 +460,7 @@ export function App() {
           } else {
             discrepanciesToArchive.push({
               invoiceNo: prevSession.invoiceNo,
+              orderNo: prevSession.orderNo || item.orderNo,
               itemCode: item.itemCode,
               itemName: item.itemName,
               unit: item.unit,
@@ -422,21 +470,32 @@ export function App() {
               qtyStatus: item.qtyStatus,
               difference: item.actualQty - item.requiredQty,
               auditedAt,
-              notes: item.codeStatus === 'MISMATCH' ? 'Mismatch' : item.qtyStatus,
+              notes: item.codeStatus === 'MISMATCH' ? 'صنف غير مدرج بالفاتورة' : item.qtyStatus,
             });
           }
         }
 
         handleInvoiceCompleted(prevSession.invoiceNo, cleanDiscarded, discrepanciesToArchive);
-
-        // Immediately lock onto new invoice
         await lockInvoiceByBarcode(clean);
       } else {
-        // Step B: Item scan in current session (Random sequence)
+        // Step C: Item scan within active invoice session
+        // Enforce rule: Item barcode MUST be longer than 10 digits (> 10 digits)
+        if (!isItemBarcodeValidLength(clean)) {
+          if (settings.soundEnabled) SoundEffects.playMismatchWarning(settings.soundVolume);
+          if (settings.vibrationEnabled) SoundEffects.vibrate([150, 80, 150]);
+          setScannerAlertNotice({
+            message: `⚠️ تم رفض الصنف: شرط النظام يتطلب أن يكون باركود الصنف أطول من 10 أرقام (> 10 خانات). الكود الحالي: [${clean}] مكون من ${clean.length} خانات فقط.`,
+            type: 'blocked',
+          });
+          setTimeout(() => setScannerAlertNotice(null), 5000);
+          return;
+        }
+
         await scanItemByBarcode(clean, activeSession);
       }
     }
-  }, [activeSession, lockInvoiceByBarcode, scanItemByBarcode, settings.scannerPrefixInvoice]);
+  }, [activeSession, currentTab, handleInvoiceCompleted, lockInvoiceByBarcode, scanItemByBarcode, settings.soundEnabled, settings.soundVolume, settings.vibrationEnabled]);
+
 
   const { lastScannedBarcode, isScannerActive } = useScannerListener({
     onScan: handleHardwareScan,
@@ -490,6 +549,21 @@ export function App() {
 
       {/* Main Screen Content */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5 pb-20 md:pb-6">
+        {/* Global Scanner Feedback Toast / Notice */}
+        {scannerAlertNotice && (
+          <div className="mb-4 p-3.5 rounded-xl bg-red-950/95 border-2 border-red-500/80 text-red-100 flex items-center justify-between gap-3 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="flex items-center gap-2.5 font-bold text-sm">
+              <span className="text-xl shrink-0">🛑</span>
+              <span>{scannerAlertNotice.message}</span>
+            </div>
+            <button
+              onClick={() => setScannerAlertNotice(null)}
+              className="px-2 py-1 hover:bg-red-900 rounded-lg text-red-300 hover:text-white text-xs font-bold shrink-0"
+            >
+              {isRtl ? 'إغلاق' : 'Dismiss'}
+            </button>
+          </div>
+        )}
         {/* 0. Home & Welcome Screen (When no active workstation is selected) */}
         {currentTab === 'welcome' && (
           <WelcomeDashboardScreen
