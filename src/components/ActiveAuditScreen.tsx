@@ -213,6 +213,30 @@ export const ActiveAuditScreen: React.FC<ActiveAuditScreenProps> = ({
     return () => clearTimeout(timer);
   }, [activeSession, isCameraQrOpen, blockedInvoiceWarning]);
 
+  // High-speed Scanner Auto-focus Guard: Re-focus barcode input when user taps outside modal inputs
+  useEffect(() => {
+    const handleDocumentClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (
+        target.closest('input') ||
+        target.closest('textarea') ||
+        target.closest('select') ||
+        target.closest('button') ||
+        target.closest('[role="dialog"]') ||
+        target.closest('.modal-container')
+      ) {
+        return;
+      }
+      if (scannerInputRef.current && document.activeElement !== scannerInputRef.current) {
+        scannerInputRef.current.focus();
+      }
+    };
+
+    window.addEventListener('click', handleDocumentClick);
+    return () => window.removeEventListener('click', handleDocumentClick);
+  }, []);
+
   // STEP A: Lock into an Invoice session (by Invoice Number OR Order Number)
   const lockInvoiceSession = async (invoiceNoInput: string, forceReopen = false) => {
     const cleanInput = invoiceNoInput.trim();
@@ -899,6 +923,11 @@ export const ActiveAuditScreen: React.FC<ActiveAuditScreenProps> = ({
     ? Math.min(100, Math.round((totalScannedQuantity / totalRequiredQuantity) * 100)) 
     : 0;
 
+  // IRA% Formula: (Matched Items / Total Required Items) * 100
+  const iraPercent = totalItemsRequired > 0 
+    ? Math.round((exactCount / totalItemsRequired) * 1000) / 10 
+    : 0;
+
   const isInvoice100PercentComplete = totalItemsRequired > 0 && exactCount === totalItemsRequired && mismatchCount === 0 && surplusCount === 0;
 
   const hasAnyOrderNo = useMemo(() => {
@@ -1458,7 +1487,7 @@ export const ActiveAuditScreen: React.FC<ActiveAuditScreenProps> = ({
 
             {/* 🌟 PROMINENT TOTAL INVOICE QUANTITY & ITEM COUNT CARDS (Requirement 4) */}
             <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-4 shadow-inner">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-center">
                 {/* Total Invoice Quantity (الكمية الإجمالية للفاتورة) */}
                 <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl">
                   <span className="text-slate-400 block text-xs font-semibold mb-1">
@@ -1478,8 +1507,8 @@ export const ActiveAuditScreen: React.FC<ActiveAuditScreenProps> = ({
                     totalScannedQuantity === totalRequiredQuantity 
                       ? 'text-emerald-300' 
                       : totalScannedQuantity < totalRequiredQuantity 
-                        ? 'text-amber-400' 
-                        : 'text-purple-400'
+                        ? 'text-red-400' 
+                        : 'text-amber-400'
                   }`}>
                     {totalScannedQuantity} <span className="text-xs text-slate-400 font-normal">/ {totalRequiredQuantity}</span>
                   </div>
@@ -1504,6 +1533,22 @@ export const ActiveAuditScreen: React.FC<ActiveAuditScreenProps> = ({
                     {exactCount} <span className="text-xs text-slate-400 font-normal">/ {totalItemsRequired}</span>
                   </div>
                 </div>
+
+                {/* IRA% Inventory Record Accuracy (معدل دقة الجرد) */}
+                <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl col-span-2 sm:col-span-1">
+                  <span className="text-slate-400 block text-xs font-semibold mb-1" title="معدل دقة مطابقة الأصناف = (الأصناف المطابقة ÷ إجمالي الأصناف) × 100">
+                    {isRtl ? 'دقة الجرد (IRA%)' : 'IRA% Accuracy'}
+                  </span>
+                  <div className={`text-2xl sm:text-3xl font-black font-mono ${
+                    iraPercent === 100 
+                      ? 'text-emerald-300' 
+                      : iraPercent >= 90 
+                        ? 'text-amber-400' 
+                        : 'text-red-400'
+                  }`}>
+                    {iraPercent}%
+                  </div>
+                </div>
               </div>
 
               {/* Progress Bar & Status Pill */}
@@ -1513,16 +1558,16 @@ export const ActiveAuditScreen: React.FC<ActiveAuditScreenProps> = ({
                     <span className="text-slate-300">{isRtl ? 'نسبة اكتمال فحص الفاتورة:' : 'Audit Completion:'}</span>
                     <span className={`px-2 py-0.5 rounded-full text-[11px] font-black ${
                       isInvoice100PercentComplete 
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' 
+                        ? 'bg-emerald-950 text-emerald-300 border border-emerald-600' 
                         : shortageCount > 0 
-                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' 
-                          : 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                          ? 'bg-red-950 text-red-300 border border-red-600' 
+                          : 'bg-amber-950 text-amber-300 border border-amber-600'
                     }`}>
                       {isInvoice100PercentComplete 
                         ? (isRtl ? 'جاهزة للإقفال (مكتملة 100%)' : 'Ready to Close (100%)')
                         : shortageCount > 0 
-                          ? (isRtl ? `يوجد نواقص (${totalRequiredQuantity - totalScannedQuantity} قطعة)` : `Has Shortages (${totalRequiredQuantity - totalScannedQuantity} units)`)
-                          : (isRtl ? 'يوجد زيادات' : 'Has Surplus')}
+                          ? (isRtl ? `يوجد عجز (${totalRequiredQuantity - totalScannedQuantity} قطعة)` : `Has Shortages (${totalRequiredQuantity - totalScannedQuantity} units)`)
+                          : (isRtl ? 'يوجد زيادة (+)' : 'Has Surplus (+)')}
                     </span>
                   </div>
                   <span className="text-emerald-400 font-mono text-sm">{progressPercent}%</span>
@@ -1583,7 +1628,7 @@ export const ActiveAuditScreen: React.FC<ActiveAuditScreenProps> = ({
                   <div className="text-center bg-slate-950 px-4 py-2 rounded-xl border border-slate-800">
                     <span className="text-[10px] text-slate-400 block uppercase font-mono">{t.scannedCount} / {t.requiredTarget}</span>
                     <div className="text-2xl font-black font-mono text-white">
-                      <span className={lastScannedItem.qtyStatus === 'EXACT' ? 'text-emerald-400' : lastScannedItem.qtyStatus === 'SURPLUS' ? 'text-amber-400' : 'text-blue-400'}>
+                      <span className={lastScannedItem.qtyStatus === 'EXACT' ? 'text-emerald-400' : lastScannedItem.qtyStatus === 'SURPLUS' ? 'text-amber-400' : 'text-red-400'}>
                         {lastScannedItem.actualQty}
                       </span>
                       <span className="text-sm text-slate-400 font-normal"> / {lastScannedItem.requiredQty} {lastScannedItem.unit}</span>
@@ -1592,19 +1637,19 @@ export const ActiveAuditScreen: React.FC<ActiveAuditScreenProps> = ({
 
                   <div className="flex flex-col gap-1">
                     {lastScannedItem.codeStatus === 'MISMATCH' ? (
-                      <span className="px-3 py-1 rounded-full text-xs font-black bg-red-950 text-red-400 border border-red-700">
+                      <span className="px-3 py-1 rounded-full text-xs font-black bg-rose-950 text-rose-300 border border-rose-600 animate-pulse">
                         {t.statusMismatch}
                       </span>
                     ) : lastScannedItem.qtyStatus === 'EXACT' ? (
-                      <span className="px-3 py-1 rounded-full text-xs font-black bg-emerald-950 text-emerald-400 border border-emerald-600">
+                      <span className="px-3 py-1 rounded-full text-xs font-black bg-emerald-950 text-emerald-300 border border-emerald-600">
                         {t.statusExact}
                       </span>
                     ) : lastScannedItem.qtyStatus === 'SHORTAGE' ? (
-                      <span className="px-3 py-1 rounded-full text-xs font-black bg-amber-950 text-amber-400 border border-amber-700">
-                        {isRtl ? `متبقي (${lastScannedItem.requiredQty - lastScannedItem.actualQty})` : `Remaining (${lastScannedItem.requiredQty - lastScannedItem.actualQty})`}
+                      <span className="px-3 py-1 rounded-full text-xs font-black bg-red-950 text-red-300 border border-red-600">
+                        {isRtl ? `عجز (-${lastScannedItem.requiredQty - lastScannedItem.actualQty})` : `Shortage (-${lastScannedItem.requiredQty - lastScannedItem.actualQty})`}
                       </span>
                     ) : (
-                      <span className="px-3 py-1 rounded-full text-xs font-black bg-purple-950 text-purple-400 border border-purple-700">
+                      <span className="px-3 py-1 rounded-full text-xs font-black bg-amber-950 text-amber-300 border border-amber-600">
                         {isRtl ? `زيادة (+${lastScannedItem.actualQty - lastScannedItem.requiredQty})` : `Surplus (+${lastScannedItem.actualQty - lastScannedItem.requiredQty})`}
                       </span>
                     )}
@@ -1647,7 +1692,7 @@ export const ActiveAuditScreen: React.FC<ActiveAuditScreenProps> = ({
                 <button
                   onClick={() => setActiveTabFilter('PENDING')}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                    activeTabFilter === 'PENDING' ? 'bg-amber-950 text-amber-300 border border-amber-800' : 'text-slate-400 hover:bg-slate-800/50'
+                    activeTabFilter === 'PENDING' ? 'bg-red-950 text-red-300 border border-red-700 font-bold' : 'text-slate-400 hover:bg-slate-800/50'
                   }`}
                 >
                   {t.pendingTab} ({shortageCount})
@@ -1655,7 +1700,7 @@ export const ActiveAuditScreen: React.FC<ActiveAuditScreenProps> = ({
                 <button
                   onClick={() => setActiveTabFilter('EXACT')}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                    activeTabFilter === 'EXACT' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'text-slate-400 hover:bg-slate-800/50'
+                    activeTabFilter === 'EXACT' ? 'bg-emerald-950 text-emerald-300 border border-emerald-700 font-bold' : 'text-slate-400 hover:bg-slate-800/50'
                   }`}
                 >
                   {t.exactTab} ({exactCount})
@@ -1663,7 +1708,7 @@ export const ActiveAuditScreen: React.FC<ActiveAuditScreenProps> = ({
                 <button
                   onClick={() => setActiveTabFilter('DISCREPANCIES')}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                    activeTabFilter === 'DISCREPANCIES' ? 'bg-red-950 text-red-300 border border-red-800' : 'text-slate-400 hover:bg-slate-800/50'
+                    activeTabFilter === 'DISCREPANCIES' ? 'bg-amber-950 text-amber-300 border border-amber-700 font-bold' : 'text-slate-400 hover:bg-slate-800/50'
                   }`}
                 >
                   {t.discrepanciesTab} ({mismatchCount + surplusCount})
@@ -1714,10 +1759,12 @@ export const ActiveAuditScreen: React.FC<ActiveAuditScreenProps> = ({
                           isLastScanned 
                             ? 'bg-emerald-950/40 font-semibold' 
                             : item.codeStatus === 'MISMATCH' 
-                              ? 'bg-red-950/30' 
+                              ? 'bg-rose-950/40' 
                               : item.qtyStatus === 'SURPLUS'
                                 ? 'bg-amber-950/20'
-                                : 'hover:bg-slate-800/40'
+                                : item.qtyStatus === 'SHORTAGE'
+                                  ? 'bg-red-950/20'
+                                  : 'hover:bg-slate-800/40'
                         }`}
                       >
                         <td className="py-2.5 px-3 text-slate-400 text-start">{idx + 1}</td>
@@ -1732,34 +1779,34 @@ export const ActiveAuditScreen: React.FC<ActiveAuditScreenProps> = ({
                         <td className="py-2.5 px-3 text-start text-slate-300 font-sans truncate max-w-xs">{item.itemName}</td>
                         <td className="py-2.5 px-3 text-center text-slate-400">{item.requiredQty} {item.unit}</td>
                         <td className="py-2.5 px-3 text-center font-bold text-white">
-                          <span className={item.qtyStatus === 'EXACT' ? 'text-emerald-400' : item.qtyStatus === 'SURPLUS' ? 'text-amber-400' : 'text-blue-400'}>
+                          <span className={item.qtyStatus === 'EXACT' ? 'text-emerald-400' : item.qtyStatus === 'SURPLUS' ? 'text-amber-400' : 'text-red-400'}>
                             {item.actualQty}
                           </span>
                         </td>
                         <td className="py-2.5 px-3 text-center font-bold">
                           {diff === 0 ? (
-                            <span className="text-emerald-400">0</span>
+                            <span className="text-emerald-400 font-black">0</span>
                           ) : diff < 0 ? (
-                            <span className="text-amber-400">{diff}</span>
+                            <span className="text-red-400 font-black">{diff}</span>
                           ) : (
-                            <span className="text-purple-400">+{diff}</span>
+                            <span className="text-amber-400 font-black">+{diff}</span>
                           )}
                         </td>
                         <td className="py-2.5 px-3 text-center">
                           {item.codeStatus === 'MISMATCH' ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-950 text-red-400 border border-red-800">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950 text-rose-300 border border-rose-600 animate-pulse">
                               {t.statusMismatch}
                             </span>
                           ) : item.qtyStatus === 'EXACT' ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-600">
                               {t.statusExact}
                             </span>
                           ) : item.qtyStatus === 'SHORTAGE' ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-400 border border-amber-800">
-                              {isRtl ? 'نقص' : 'SHORTAGE'}
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-950 text-red-300 border border-red-600">
+                              {isRtl ? 'عجز' : 'SHORTAGE'}
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-950 text-purple-400 border border-purple-800">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-600">
                               {isRtl ? 'زيادة' : 'SURPLUS'}
                             </span>
                           )}

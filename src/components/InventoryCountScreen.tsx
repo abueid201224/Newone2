@@ -929,7 +929,7 @@ export const InventoryCountScreen: React.FC<InventoryCountScreenProps> = ({
                             </td>
                             {/* Variance */}
                             <td className="p-2.5 text-center font-mono font-bold">
-                              <span className={item.varianceQty === 0 ? 'text-emerald-400' : item.varianceQty > 0 ? 'text-purple-400' : 'text-amber-400'}>
+                              <span className={item.varianceQty === 0 ? 'text-emerald-400 font-black' : item.varianceQty > 0 ? 'text-amber-400 font-black' : 'text-red-400 font-black'}>
                                 {item.varianceQty > 0 ? `+${item.varianceQty}` : item.varianceQty}
                               </span>
                             </td>
@@ -937,10 +937,10 @@ export const InventoryCountScreen: React.FC<InventoryCountScreenProps> = ({
                             <td className="p-2.5 text-center">
                               <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
                                 item.status === 'EXACT'
-                                  ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-600'
                                   : item.status === 'SHORTAGE'
-                                  ? 'bg-amber-950 text-amber-300 border border-amber-800'
-                                  : 'bg-purple-950 text-purple-300 border border-purple-800'
+                                  ? 'bg-red-950 text-red-300 border border-red-600'
+                                  : 'bg-amber-950 text-amber-300 border border-amber-600'
                               }`}>
                                 {item.status === 'EXACT' ? 'مطابق' : item.status === 'SHORTAGE' ? 'عجز' : 'زيادة'}
                               </span>

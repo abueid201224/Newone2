@@ -398,6 +398,14 @@ export const ReceivingScreen: React.FC<ReceivingScreenProps> = ({
   const totalPacks = items.reduce((acc, i) => acc + (i.packsCount || 0), 0);
   const totalPieces = items.reduce((acc, i) => acc + (i.piecesCount || 0), 0);
 
+  const exactItemsCount = items.filter(i => i.status === 'EXACT').length;
+  const shortageItemsCount = items.filter(i => i.status === 'SHORTAGE').length;
+  const surplusItemsCount = items.filter(i => i.status === 'SURPLUS').length;
+  const receivingVariance = totalReceived - totalExpected;
+  const receivingIraPercent = items.length > 0 
+    ? Math.round((exactItemsCount / items.length) * 1000) / 10 
+    : 0;
+
   const filteredItems = items.filter(item => 
     !searchQuery || 
     item.itemCode.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -692,28 +700,42 @@ export const ReceivingScreen: React.FC<ReceivingScreenProps> = ({
           {/* KPIs & Packaging Totals */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl">
-              <div className="text-[11px] text-slate-400 font-semibold">أصناف أمر الشراء</div>
-              <div className="text-lg font-black text-white mt-1">{items.length} <span className="text-xs font-normal text-slate-400">صنف</span></div>
-            </div>
-
-            <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl">
               <div className="text-[11px] text-blue-400 font-semibold">المطلوب دفترياً</div>
               <div className="text-lg font-black text-blue-300 mt-1">{totalExpected} <span className="text-xs font-normal text-slate-400">قطعة</span></div>
             </div>
 
             <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl">
-              <div className="text-[11px] text-emerald-400 font-semibold">إجمالي المستلم الفعلي</div>
+              <div className="text-[11px] text-emerald-400 font-semibold">المستلم الفعلي</div>
               <div className="text-lg font-black text-emerald-300 mt-1">{totalReceived} <span className="text-xs font-normal text-slate-400">قطعة</span></div>
             </div>
 
             <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl">
-              <div className="text-[11px] text-amber-400 font-semibold">إجمالي الكراتين</div>
-              <div className="text-lg font-black text-amber-300 mt-1">{totalCartons} <span className="text-xs font-normal text-slate-400">كرتونة</span></div>
+              <div className="text-[11px] text-slate-300 font-semibold">الفارق الكلي</div>
+              <div className={`text-lg font-black mt-1 ${
+                receivingVariance === 0 ? 'text-emerald-400' : receivingVariance < 0 ? 'text-red-400' : 'text-amber-400'
+              }`}>
+                {receivingVariance === 0 ? '0 مطابق' : receivingVariance < 0 ? `${receivingVariance} عجز` : `+${receivingVariance} زيادة`}
+              </div>
             </div>
 
             <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl">
-              <div className="text-[11px] text-indigo-400 font-semibold">إجمالي الباكتات</div>
-              <div className="text-lg font-black text-indigo-300 mt-1">{totalPacks} <span className="text-xs font-normal text-slate-400">باكت</span></div>
+              <div className="text-[11px] text-slate-400 font-semibold">مطابق / عجز / زيادة</div>
+              <div className="text-sm font-black mt-1 flex items-center gap-1 font-mono">
+                <span className="text-emerald-400">{exactItemsCount} مط</span>
+                <span className="text-slate-600">|</span>
+                <span className="text-red-400">{shortageItemsCount} عجز</span>
+                <span className="text-slate-600">|</span>
+                <span className="text-amber-400">{surplusItemsCount} ز</span>
+              </div>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl">
+              <div className="text-[11px] text-cyan-400 font-semibold" title="IRA% = (الأصناف المطابقة ÷ إجمالي الأصناف) × 100">دقة المطابقة (IRA%)</div>
+              <div className={`text-lg font-black mt-1 ${
+                receivingIraPercent === 100 ? 'text-emerald-300' : receivingIraPercent >= 90 ? 'text-amber-400' : 'text-red-400'
+              }`}>
+                {receivingIraPercent}%
+              </div>
             </div>
 
             <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl">
@@ -997,6 +1019,7 @@ export const ReceivingScreen: React.FC<ReceivingScreenProps> = ({
                       </th>
 
                       <th className="p-2.5 text-center font-bold text-white bg-slate-900">إجمالي المستلم</th>
+                      <th className="p-2.5 text-center font-bold text-white bg-slate-900">الفارق</th>
                       <th className="p-2.5 text-center">التالف</th>
                       <th className="p-2.5 text-center">رقم التشغيلة (Batch)</th>
                       <th className="p-2.5 text-center">تاريخ الصلاحية</th>
@@ -1125,6 +1148,20 @@ export const ReceivingScreen: React.FC<ReceivingScreenProps> = ({
                           {item.receivedQty}
                         </td>
 
+                        {/* Difference Column (Variance = Received - Expected) */}
+                        <td className="p-2.5 text-center font-mono font-bold text-sm bg-slate-950/60">
+                          {(() => {
+                            const diff = item.receivedQty - item.expectedQty;
+                            if (diff === 0) {
+                              return <span className="text-emerald-400 font-black">0</span>;
+                            } else if (diff < 0) {
+                              return <span className="text-red-400 font-black">{diff}</span>;
+                            } else {
+                              return <span className="text-amber-400 font-black">+{diff}</span>;
+                            }
+                          })()}
+                        </td>
+
                         {/* Damaged Qty */}
                         <td className="p-2.5 text-center">
                           <input
@@ -1161,12 +1198,12 @@ export const ReceivingScreen: React.FC<ReceivingScreenProps> = ({
                         <td className="p-2.5 text-center">
                           <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
                             item.status === 'EXACT'
-                              ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                              ? 'bg-emerald-950 text-emerald-300 border border-emerald-600'
                               : item.status === 'SHORTAGE'
-                              ? 'bg-amber-950 text-amber-300 border border-amber-800'
-                              : 'bg-purple-950 text-purple-300 border border-purple-800'
+                              ? 'bg-red-950 text-red-300 border border-red-600'
+                              : 'bg-amber-950 text-amber-300 border border-amber-600'
                           }`}>
-                            {item.status === 'EXACT' ? 'مكتمل' : item.status === 'SHORTAGE' ? 'ناقص' : 'زيادة'}
+                            {item.status === 'EXACT' ? 'مطابق' : item.status === 'SHORTAGE' ? 'عجز' : 'زيادة'}
                           </span>
                         </td>
 
