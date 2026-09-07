@@ -129,6 +129,8 @@ export interface SyncMetadata {
   fileSize?: string;
 }
 
+export type LightingMode = 'eye-comfort' | 'high-contrast' | 'warm-amber';
+
 export interface AppSettings {
   language: 'ar' | 'en';
   soundEnabled: boolean;
@@ -144,6 +146,7 @@ export interface AppSettings {
   auditorId?: string;
   auditorTitle?: string;
   auditorSignature?: string;
+  lightingMode?: LightingMode; // نمط الإضاءة المتكيف والمريح للعين
 }
 
 // -------------------------------------------------------------

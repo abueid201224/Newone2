@@ -1,1 +1,30 @@
 @import "tailwindcss";
+
+/* Eye-comfort & Adaptive Screen Lighting Schemes */
+.theme-eye-comfort {
+  --theme-bg: #0b1319;
+  background-color: #0b1319;
+  color: #e2e8f0;
+  color-scheme: dark;
+}
+
+.theme-high-contrast {
+  --theme-bg: #020617;
+  background-color: #020617;
+  color: #ffffff;
+  color-scheme: dark;
+}
+
+.theme-warm-amber {
+  --theme-bg: #13110e;
+  background-color: #13110e;
+  color: #fef3c7;
+  color-scheme: dark;
+}
+
+/* Eye-comfort smooth transitions */
+* {
+  transition-property: background-color, border-color, color;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}

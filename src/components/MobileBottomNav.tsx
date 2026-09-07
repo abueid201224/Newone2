@@ -11,7 +11,8 @@ import {
   Sliders,
   Layers,
   Smartphone,
-  Home
+  Home,
+  Database
 } from 'lucide-react';
 import type { ActiveNavTab } from './Navbar';
 
@@ -82,22 +83,26 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         <span className="text-[9px] font-black mt-0.5">{isRtl ? 'التدقيق' : 'Audit'}</span>
       </button>
 
-      {/* 4. Discrepancies Alerts */}
+      {/* 4. Archive & App Data */}
       <button
-        onClick={() => onSelectTab('errors')}
+        onClick={() => onSelectTab('archive')}
+        id="mobile-archive-btn"
         className={`flex flex-col items-center justify-center p-1.5 min-w-[52px] rounded-xl transition-colors relative ${
-          currentTab === 'errors' ? 'text-red-400 font-bold bg-slate-800/80' : 'text-slate-400 hover:text-slate-200'
+          currentTab === 'archive' || currentTab === 'errors' || currentTab === 'master' || currentTab === 'settings'
+            ? 'text-purple-400 font-bold bg-slate-800/80' 
+            : 'text-slate-400 hover:text-slate-200'
         }`}
+        title={isRtl ? 'الأرشيف وبيانات التطبيق' : 'Archive & App Data'}
       >
         <div className="relative">
-          <AlertTriangle className="w-5 h-5" />
+          <Database className="w-5 h-5" />
           {errorCount > 0 && (
             <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow">
               {errorCount > 9 ? '9+' : errorCount}
             </span>
           )}
         </div>
-        <span className="text-[10px] mt-1">{isRtl ? 'الفروقات' : 'Alerts'}</span>
+        <span className="text-[10px] mt-1">{isRtl ? 'الأرشيف' : 'Archive'}</span>
       </button>
 
       {/* 5. Android APK Guide Quick Trigger */}

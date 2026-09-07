@@ -34,6 +34,8 @@ import { useScannerListener } from './services/scannerListener';
 import { SoundEffects } from './services/audio';
 
 import { Navbar, type ActiveNavTab } from './components/Navbar';
+import { VerticalSidebar } from './components/VerticalSidebar';
+import { ArchiveAndAppDataScreen } from './components/ArchiveAndAppDataScreen';
 import { ActiveAuditScreen } from './components/ActiveAuditScreen';
 import { ErrorReportScreen } from './components/ErrorReportScreen';
 import { MasterDatabaseView } from './components/MasterDatabaseView';
@@ -91,6 +93,8 @@ export function App() {
   const [isAuditorModalOpen, setIsAuditorModalOpen] = useState(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [isServicesDrawerOpen, setIsServicesDrawerOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isApkGuideModalOpen, setIsApkGuideModalOpen] = useState(false);
   const [isLogicGuideOpen, setIsLogicGuideOpen] = useState(false);
   const [logicGuideInitialTab, setLogicGuideInitialTab] = useState<LogicGuideTab>('all');
@@ -533,10 +537,17 @@ export function App() {
   };
 
   const isRtl = settings.language === 'ar';
+  const lightingMode = settings.lightingMode || 'eye-comfort';
+  const lightingClass = 
+    lightingMode === 'eye-comfort'
+      ? 'theme-eye-comfort bg-[#0b1319] text-slate-100 selection:bg-teal-600 selection:text-white'
+      : lightingMode === 'high-contrast'
+      ? 'theme-high-contrast bg-[#020617] text-white selection:bg-emerald-600 selection:text-white'
+      : 'theme-warm-amber bg-[#13110e] text-amber-100 selection:bg-amber-600 selection:text-white';
 
   return (
     <div 
-      className={`min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white ${isRtl ? 'rtl' : 'ltr'}`}
+      className={`min-h-screen flex flex-col font-sans transition-colors duration-200 ${lightingClass} ${isRtl ? 'rtl' : 'ltr'}`}
       dir={isRtl ? 'rtl' : 'ltr'}
     >
       {/* Top Navigation Bar */}
@@ -550,6 +561,7 @@ export function App() {
         overdueLabCount={overdueLabCount}
         pendingLabCount={pendingLabCount}
         settings={settings}
+        onUpdateSettings={handleUpdateSettings}
         onToggleSound={handleToggleSound}
         onToggleLanguage={handleToggleLanguage}
         isScannerActive={isScannerActive}
@@ -557,158 +569,175 @@ export function App() {
         onInstallPwa={handleInstallPwa}
         onOpenAuditorModal={() => setIsAuditorModalOpen(true)}
         onOpenUserModal={() => setIsUserModalOpen(true)}
-        onToggleDrawer={() => setIsServicesDrawerOpen(prev => !prev)}
+        onToggleSidebar={() => setIsMobileSidebarOpen(prev => !prev)}
+        onToggleDrawer={() => setIsMobileSidebarOpen(prev => !prev)}
         onOpenApkGuide={() => setIsApkGuideModalOpen(true)}
         onOpenFirebaseModal={() => setIsFirebaseModalOpen(true)}
         onOpenLogicGuide={handleOpenLogicGuide}
       />
 
-      {/* Main Screen Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5 pb-20 md:pb-6">
-        {/* Global Scanner Feedback Toast / Notice */}
-        {scannerAlertNotice && (
-          <div className="mb-4 p-3.5 rounded-xl bg-red-950/95 border-2 border-red-500/80 text-red-100 flex items-center justify-between gap-3 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200">
-            <div className="flex items-center gap-2.5 font-bold text-sm">
-              <span className="text-xl shrink-0">🛑</span>
-              <span>{scannerAlertNotice.message}</span>
+      {/* Main Workspace with Vertical Sidebar Layout */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Persistent Technical Vertical Services Sidebar */}
+        <VerticalSidebar
+          currentTab={currentTab}
+          onSelectTab={(tab) => setCurrentTab(tab)}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={() => setIsSidebarCollapsed(prev => !prev)}
+          settings={settings}
+          onUpdateSettings={handleUpdateSettings}
+          syncMeta={syncMeta}
+          errorCount={discrepancies.length + wrongPickings.length}
+          pendingLabCount={pendingLabCount}
+          overdueLabCount={overdueLabCount}
+          activeSession={activeSession}
+          onOpenSyncModal={() => setIsSyncModalOpen(true)}
+          onOpenUserModal={() => setIsUserModalOpen(true)}
+          onOpenLogicGuide={handleOpenLogicGuide}
+          isMobileOpen={isMobileSidebarOpen}
+          onCloseMobile={() => setIsMobileSidebarOpen(false)}
+        />
+
+        {/* Main Workstation Screen Viewport */}
+        <main className="flex-1 overflow-y-auto p-3 sm:p-5 pb-20 md:pb-6 min-w-0">
+          {/* Global Scanner Feedback Toast / Notice */}
+          {scannerAlertNotice && (
+            <div className="mb-4 p-3.5 rounded-xl bg-red-950/95 border-2 border-red-500/80 text-red-100 flex items-center justify-between gap-3 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex items-center gap-2.5 font-bold text-sm">
+                <span className="text-xl shrink-0">🛑</span>
+                <span>{scannerAlertNotice.message}</span>
+              </div>
+              <button
+                onClick={() => setScannerAlertNotice(null)}
+                className="px-2 py-1 hover:bg-red-900 rounded-lg text-red-300 hover:text-white text-xs font-bold shrink-0"
+              >
+                {isRtl ? 'إغلاق' : 'Dismiss'}
+              </button>
             </div>
-            <button
-              onClick={() => setScannerAlertNotice(null)}
-              className="px-2 py-1 hover:bg-red-900 rounded-lg text-red-300 hover:text-white text-xs font-bold shrink-0"
-            >
-              {isRtl ? 'إغلاق' : 'Dismiss'}
-            </button>
-          </div>
-        )}
-        {/* 0. Home & Welcome Screen (When no active workstation is selected) */}
-        {currentTab === 'welcome' && (
-          <WelcomeDashboardScreen
-            syncMeta={syncMeta}
-            activeSession={activeSession}
-            errorCount={discrepancies.length + wrongPickings.length}
-            pendingLabCount={pendingLabCount}
-            overdueLabCount={overdueLabCount}
-            onSelectService={(tab) => setCurrentTab(tab)}
-            onOpenSyncModal={() => setIsSyncModalOpen(true)}
-            onOpenLogicGuide={handleOpenLogicGuide}
-            onOpenUserModal={() => setIsUserModalOpen(true)}
-            onOpenApkGuide={() => setIsApkGuideModalOpen(true)}
-            settings={settings}
-            isRtl={isRtl}
-          />
-        )}
+          )}
+          {/* 0. Home & Welcome Screen (When no active workstation is selected) */}
+          {currentTab === 'welcome' && (
+            <WelcomeDashboardScreen
+              syncMeta={syncMeta}
+              activeSession={activeSession}
+              errorCount={discrepancies.length + wrongPickings.length}
+              pendingLabCount={pendingLabCount}
+              overdueLabCount={overdueLabCount}
+              onSelectService={(tab) => setCurrentTab(tab)}
+              onOpenSyncModal={() => setIsSyncModalOpen(true)}
+              onOpenLogicGuide={handleOpenLogicGuide}
+              onOpenUserModal={() => setIsUserModalOpen(true)}
+              onOpenApkGuide={() => setIsApkGuideModalOpen(true)}
+              settings={settings}
+              isRtl={isRtl}
+            />
+          )}
 
-        {/* 1. Inbound Receiving Screen */}
-        {currentTab === 'receiving' && (
-          <ReceivingScreen
-            settings={settings}
-            lastScannedCode={lastScannedBarcode}
-            onOpenLogicGuide={handleOpenLogicGuide}
-          />
-        )}
+          {/* 1. Inbound Receiving Screen */}
+          {currentTab === 'receiving' && (
+            <ReceivingScreen
+              settings={settings}
+              lastScannedCode={lastScannedBarcode}
+              onOpenLogicGuide={handleOpenLogicGuide}
+            />
+          )}
 
-        {/* 2. Invoice Dispatch Auditor Screen */}
-        {currentTab === 'audit' && (
-          <ActiveAuditScreen
-            activeSession={activeSession}
-            setActiveSession={setActiveSession}
-            settings={settings}
-            onUpdateSettings={handleUpdateSettings}
-            onInvoiceCompleted={handleInvoiceCompleted}
-            onOpenSyncModal={() => setIsSyncModalOpen(true)}
-            lastScannedCode={lastScannedBarcode}
-            discrepancies={discrepancies}
-            wrongPickings={wrongPickings}
-            onRefreshDiscrepancies={() => {
-              refreshDiscrepancies();
-              refreshWrongPickings();
-            }}
-            onOpenLogicGuide={handleOpenLogicGuide}
-          />
-        )}
+          {/* 2. Invoice Dispatch Auditor Screen */}
+          {currentTab === 'audit' && (
+            <ActiveAuditScreen
+              activeSession={activeSession}
+              setActiveSession={setActiveSession}
+              settings={settings}
+              onUpdateSettings={handleUpdateSettings}
+              onInvoiceCompleted={handleInvoiceCompleted}
+              onOpenSyncModal={() => setIsSyncModalOpen(true)}
+              lastScannedCode={lastScannedBarcode}
+              discrepancies={discrepancies}
+              wrongPickings={wrongPickings}
+              onRefreshDiscrepancies={() => {
+                refreshDiscrepancies();
+                refreshWrongPickings();
+              }}
+              onOpenLogicGuide={handleOpenLogicGuide}
+            />
+          )}
 
-        {/* 3. Returns & Refunds (RMA) Screen with Smart PDF extraction */}
-        {currentTab === 'returns' && (
-          <ReturnsScreen
-            settings={settings}
-            lastScannedCode={lastScannedBarcode}
-            onOpenAuditorModal={() => setIsAuditorModalOpen(true)}
-            onTransferToAudit={(invoiceNo) => {
-              lockInvoiceByBarcode(invoiceNo);
-              setCurrentTab('audit');
-            }}
-            discrepancies={discrepancies}
-            wrongPickings={wrongPickings}
-            onRefreshDiscrepancies={() => {
-              refreshDiscrepancies();
-              refreshWrongPickings();
-            }}
-            onOpenLogicGuide={handleOpenLogicGuide}
-          />
-        )}
+          {/* 3. Returns & Refunds (RMA) Screen with Smart PDF extraction */}
+          {currentTab === 'returns' && (
+            <ReturnsScreen
+              settings={settings}
+              lastScannedCode={lastScannedBarcode}
+              onOpenAuditorModal={() => setIsAuditorModalOpen(true)}
+              onTransferToAudit={(invoiceNo) => {
+                lockInvoiceByBarcode(invoiceNo);
+                setCurrentTab('audit');
+              }}
+              discrepancies={discrepancies}
+              wrongPickings={wrongPickings}
+              onRefreshDiscrepancies={() => {
+                refreshDiscrepancies();
+                refreshWrongPickings();
+              }}
+              onOpenLogicGuide={handleOpenLogicGuide}
+            />
+          )}
 
-        {/* 4. Cycle Count & Packaging Breakdown Screen */}
-        {currentTab === 'inventory' && (
-          <InventoryCountScreen
-            settings={settings}
-            lastScannedCode={lastScannedBarcode}
-            onOpenLogicGuide={handleOpenLogicGuide}
-          />
-        )}
+          {/* 4. Cycle Count & Packaging Breakdown Screen */}
+          {currentTab === 'inventory' && (
+            <InventoryCountScreen
+              settings={settings}
+              lastScannedCode={lastScannedBarcode}
+              onOpenLogicGuide={handleOpenLogicGuide}
+            />
+          )}
 
-        {/* 5. Batch Wave Picking List Generator Screen */}
-        {currentTab === 'picking' && (
-          <PickingWaveScreen
-            settings={settings}
-            lastScannedCode={lastScannedBarcode}
-            onOpenLogicGuide={handleOpenLogicGuide}
-          />
-        )}
+          {/* 5. Batch Wave Picking List Generator Screen */}
+          {currentTab === 'picking' && (
+            <PickingWaveScreen
+              settings={settings}
+              lastScannedCode={lastScannedBarcode}
+              onOpenLogicGuide={handleOpenLogicGuide}
+            />
+          )}
 
-        {/* Discrepancies & Discarded Wrong Pickings */}
-        {currentTab === 'errors' && (
-          <ErrorReportScreen
-            discrepancies={discrepancies}
-            wrongPickings={wrongPickings}
-            onRefreshDiscrepancies={refreshDiscrepancies}
-            onRefreshWrongPickings={refreshWrongPickings}
-            settings={settings}
-            onOpenAuditorModal={() => setIsAuditorModalOpen(true)}
-          />
-        )}
-
-        {/* Master Database Screen */}
-        {currentTab === 'master' && (
-          <MasterDatabaseView
-            syncMeta={syncMeta}
-            onOpenSyncModal={() => setIsSyncModalOpen(true)}
-            onSelectInvoice={(invNo) => {
-              lockInvoiceByBarcode(invNo);
-              setCurrentTab('audit');
-            }}
-          />
-        )}
-
-        {/* Scanner Simulator & Tools Screen */}
-        {currentTab === 'settings' && (
-          <ScannerSimulator
-            settings={settings}
-            onUpdateSettings={handleUpdateSettings}
-            onSimulateScan={handleHardwareScan}
-            activeInvoiceNo={activeSession?.invoiceNo || null}
-            masterItems={masterItemsList}
-            onOpenAuditorModal={() => setIsAuditorModalOpen(true)}
-            canInstallPwa={Boolean(deferredInstallPrompt)}
-            onInstallPwa={handleInstallPwa}
-          />
-        )}
-      </main>
+          {/* Consolidated Archive & App Data Screen (Discrepancies, Master Invoices, Tools & Simulator) */}
+          {(currentTab === 'archive' || currentTab === 'errors' || currentTab === 'master' || currentTab === 'settings') && (
+            <ArchiveAndAppDataScreen
+              initialSubTab={
+                currentTab === 'errors' ? 'discrepancies' :
+                currentTab === 'master' ? 'master' :
+                currentTab === 'settings' ? 'simulator-tools' : 'discrepancies'
+              }
+              discrepancies={discrepancies}
+              wrongPickings={wrongPickings}
+              onRefreshDiscrepancies={refreshDiscrepancies}
+              onRefreshWrongPickings={refreshWrongPickings}
+              settings={settings}
+              onUpdateSettings={handleUpdateSettings}
+              syncMeta={syncMeta}
+              onOpenSyncModal={() => setIsSyncModalOpen(true)}
+              onSelectInvoice={(invNo) => {
+                lockInvoiceByBarcode(invNo);
+                setCurrentTab('audit');
+              }}
+              onSimulateScan={handleHardwareScan}
+              activeInvoiceNo={activeSession?.invoiceNo || null}
+              masterItems={masterItemsList}
+              onOpenAuditorModal={() => setIsAuditorModalOpen(true)}
+              onOpenFirebaseModal={() => setIsFirebaseModalOpen(true)}
+              onOpenApkGuide={() => setIsApkGuideModalOpen(true)}
+              canInstallPwa={Boolean(deferredInstallPrompt)}
+              onInstallPwa={handleInstallPwa}
+            />
+          )}
+        </main>
+      </div>
 
       {/* Mobile & Tablet Bottom Quick Navigation Bar */}
       <MobileBottomNav
         currentTab={currentTab}
         onSelectTab={(tab) => setCurrentTab(tab)}
-        onToggleDrawer={() => setIsServicesDrawerOpen(prev => !prev)}
+        onToggleDrawer={() => setIsMobileSidebarOpen(prev => !prev)}
         onOpenSyncModal={() => setIsSyncModalOpen(true)}
         errorCount={discrepancies.length + wrongPickings.length}
         isRtl={isRtl}

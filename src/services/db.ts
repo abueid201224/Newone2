@@ -547,6 +547,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   auditorName: 'أحمد حمادة',
   auditorId: 'AUD-101',
   auditorTitle: 'مدير ومراقب عمليات المستودع',
+  lightingMode: 'eye-comfort',
 };
 
 export async function getAppSettings(): Promise<AppSettings> {
